@@ -151,12 +151,14 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   </div>
   <form class="ob" id="ob2" hidden>
     <h1>What fits?</h1>
-    <p>Your sizes decide which pieces reach the mannequin. Anything not stocked in your size stays off the rail.</p>
+    <p>Your sizes, budget and what you are after decide which pieces reach the mannequin.</p>
     <div class="fields">
       <div class="field wide"><label for="fHeight">Height: <span id="hOut">165</span> cm</label><input type="range" id="fHeight" min="140" max="205" value="165"></div>
       <div class="field"><label for="fTop">Top size</label><select id="fTop"></select></div>
       <div class="field"><label for="fBottom">Bottom size</label><select id="fBottom"></select></div>
       <div class="field"><label for="fShoe">Shoe size (EU)</label><select id="fShoe"></select></div>
+      <div class="field"><label for="fBudget">Budget per piece</label><select id="fBudget"></select></div>
+      <div class="field wide"><span class="lab">Looking for</span><div class="seg" id="obCats"></div></div>
     </div>
     <div class="obrow"><button class="primary" type="submit">Step into the fitting room</button><button class="linkbtn" type="button" id="backWho">Back</button></div>
   </form>
@@ -179,6 +181,11 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     </div>
     <p class="hint" id="srcNote">These are sample pieces. Real products appear here once the catalogue is connected.</p>
     <p class="hint" id="hiddenNote" hidden></p>
+    <div class="panel">
+      <h3>Looking for</h3>
+      <div class="seg" id="catChips"></div>
+      <div class="row"><label for="sBudget">Budget per piece</label><select id="sBudget"></select></div>
+    </div>
     <div class="panel">
       <h3>Your mannequin</h3>
       <div class="row"><span class="lab">Skin tone</span><div class="sw" id="skins"></div></div>
@@ -241,6 +248,11 @@ var SKINS=['#F3D3BC','#E2B48F','#C68E64','#96623F','#5B3A26'];
 
 var S={onboarded:false,profile:{who:'w',height:165,top:'M',bottom:'M',shoe:38},look:{skin:1,hair:'short',build:'regular'},worn:{},cart:[],items:{},idx:0};
 try{var raw=localStorage.getItem('apparallel-v2');if(raw){var o=JSON.parse(raw);for(var k in o)S[k]=o[k]}}catch(e){}
+var CATS=['top','bottom','dress','outer','shoes'];
+var CATLABEL={top:'Tops',bottom:'Bottoms',dress:'Dresses',outer:'Jackets',shoes:'Shoes'};
+var BUDGETS=[[0,'Any price'],[50,'Under 50'],[100,'Under 100'],[200,'Under 200']];
+if(!S.profile.cats||!S.profile.cats.length)S.profile.cats=CATS.slice();
+if(!S.profile.budget)S.profile.budget=0;
 function save(){try{localStorage.setItem('apparallel-v2',JSON.stringify(S))}catch(e){}}
 
 var deck=[],hiddenCount=0,busy=false;
@@ -258,6 +270,8 @@ function buildDeck(){
   CATALOGUE.forEach(function(it){
     var okWho=S.profile.who==='all'||it.g==='u'||it.g===S.profile.who;
     if(!okWho)return;
+    if(S.profile.cats.indexOf(it.cat)<0)return;
+    if(S.profile.budget&&it.price>S.profile.budget)return;
     if(!fits(it)){hiddenCount++;return}
     deck.push(it.id);
   });
@@ -296,14 +310,73 @@ var G={
  sneaker:function(c){return wrap(c,mir('<path d="M111,532 L146,532 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 Z"/><path d="M101,556 L149,556" fill="none" stroke-width="2.6"/><path d="M118,540 L134,540 M117,546 L133,546" fill="none"/>'))},
  boot:function(c){return wrap(c,mir('<path d="M116,498 L146,498 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 L116,538 Z"/><path d="M101,557 L149,557" fill="none" stroke-width="3"/><path d="M130,500 L130,530" fill="none"/>'))}
 };
-var BOX={top:[62,96,176],outer:[52,90,196],dress:[10,92,280],bottom:[20,250,260],shoes:[100,478,100]};
+/* Fitting a product photo to the mannequin.
+   Each photo is measured once: where the garment sits inside the picture, and how wide
+   its body is at a few heights. The photo is then scaled so that body width matches the
+   mannequin's chest, waist or hips, and pinned at the neckline, waistline or floor. */
+var BB={},WAIT={};
+function measure(url,cb){
+  if(url in BB){cb();return}
+  if(WAIT[url]){WAIT[url].push(cb);return}
+  WAIT[url]=[cb];
+  var done=false,im=new Image();
+  function fin(v){if(done)return;done=true;BB[url]=v;var q=WAIT[url];delete WAIT[url];q.forEach(function(f){f()})}
+  im.crossOrigin='anonymous';
+  im.onload=function(){
+    try{
+      var n=96,cv=document.createElement('canvas');cv.width=n;cv.height=n;
+      var x=cv.getContext('2d');x.drawImage(im,0,0,n,n);
+      var d=x.getImageData(0,0,n,n).data,clear=0,i,j,o;
+      for(i=0;i<n*n;i++)if(d[i*4+3]<40)clear++;
+      var cut=clear>n*n*.03,m=[],x0=n,y0=n,x1=-1,y1=-1;
+      for(j=0;j<n;j++)for(i=0;i<n;i++){o=(j*n+i)*4;
+        var on=cut?d[o+3]>40:!(d[o]>240&&d[o+1]>240&&d[o+2]>240);
+        m[j*n+i]=on;if(on){if(i<x0)x0=i;if(i>x1)x1=i;if(j<y0)y0=j;if(j>y1)y1=j}}
+      var ar=(im.naturalWidth||1)/(im.naturalHeight||1);
+      if(x1<x0){fin({bx:0,by:0,bw:1,bh:1,ar:ar});return}
+      function run(f){
+        var r=Math.round(y0+f*(y1-y0)),c=Math.round((x0+x1)/2),s=0;
+        while(!m[r*n+c]&&s<12){s++;if(m[r*n+c+s]){c+=s;break}if(m[r*n+c-s]){c-=s;break}}
+        if(!m[r*n+c])return 0;
+        var a=c,b=c;while(a>0&&m[r*n+a-1])a--;while(b<n-1&&m[r*n+b+1])b++;
+        return (b-a+1)/n;
+      }
+      fin({bx:x0/n,by:y0/n,bw:(x1-x0+1)/n,bh:(y1-y0+1)/n,ar:ar,r10:run(.1),r20:run(.22),r80:run(.8)});
+    }catch(e){fin(null)}
+  };
+  im.onerror=function(){fin(null)};
+  setTimeout(function(){fin(null)},3000);
+  im.src=url;
+}
+/* box: the most room the piece may take. body: mannequin width the piece's own body should match. */
+var FIT={
+  top:{top:99,W:160,H:195,maxW:215,maxH:225,row:'r80',body:96},
+  outer:{top:92,W:176,H:215,maxW:230,maxH:245,row:'r80',body:104},
+  dress:{top:98,W:170,H:350,maxW:230,maxH:400,row:'r20',body:94},
+  bottom:{top:254,W:102,H:290,maxW:150,maxH:296,row:'r10',body:88},
+  shoes:{bottom:566,W:104,H:60}
+};
 function garment(it){
-  if(it.img){var b=BOX[it.cat];return '<image href="'+esc(it.img)+'" x="'+b[0]+'" y="'+b[1]+'" width="'+b[2]+'" height="'+b[2]+'" preserveAspectRatio="xMidYMid meet"/>'}
-  return G[it.style](it.color);
+  if(!it.img)return G[it.style](it.color);
+  var f=FIT[it.cat],b=BB[it.img]||{bx:.1,by:.08,bw:.8,bh:.84,ar:1};
+  var boxk=Math.min(f.W/b.bw,f.H*b.ar/b.bh),k=boxk,t=f.row&&b[f.row];
+  if(t&&t>b.bw*.25){
+    k=f.body/t;
+    k=Math.min(k,f.maxW/b.bw,f.maxH*b.ar/b.bh);
+    k=Math.max(k,boxk*.7);
+  }
+  var w=k,hh=k/b.ar,x=150-(b.bx+b.bw/2)*w;
+  var y=f.top!==undefined?f.top-b.by*hh:f.bottom-(b.by+b.bh)*hh;
+  return '<image href="'+esc(it.img)+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+hh.toFixed(1)+'" preserveAspectRatio="none"/>';
 }
 
 function draw(drop){
   var c=cand(),L=S.look,skin=SKINS[L.skin],sk2=shade(skin,.78);
+  if(c&&c.img&&!(c.img in BB)){
+    var want=c.id;
+    measure(c.img,function(){var n=cand();if(n&&n.id===want)draw(drop)});
+    c=null; /* hold the piece back until it has been measured */
+  }
   var sx={slim:.93,regular:1,broad:1.08}[L.build];
   var hs=.86+(S.profile.height-140)/65*.2;
   var pv={};for(var k in S.worn)pv[k]=S.worn[k];
@@ -314,7 +387,9 @@ function draw(drop){
   }
   function layer(slot){
     var id=pv[slot];if(!id||!item(id))return '';
-    var g=garment(item(id));
+    var wi=item(id);
+    if(wi.img&&!(wi.img in BB))measure(wi.img,function(){draw(false)});
+    var g=garment(wi);
     return (c&&c.id===id)?'<g id="candWrap"><g class="'+(drop?'drop':'')+'">'+g+'</g></g>':g;
   }
   var hairC='#2B2322',hairS='#4A3E3B';
@@ -339,6 +414,7 @@ function draw(drop){
     '<g transform="translate(150 566) scale('+hs+') translate(-150 -566)">'+
     '<g transform="translate(150 0) scale('+sx+' 1) translate(-150 0)">'+back+body+front+
     layer('shoes')+layer('bottom')+layer('top')+layer('dress')+layer('outer')+'</g>'+tag+'</g>';
+  var nx=byId[deck[S.idx+1]];if(nx&&nx.img)measure(nx.img,function(){});
 }
 
 /* ---------- side panel ---------- */
@@ -354,7 +430,7 @@ function panel(){
     h='<p class="eyebrow">End of the rail</p><h2>You have seen every piece</h2><p class="meta">Your picks are waiting in your parallel universe.</p>'+
       '<div><button class="primary" type="button" id="again">Go through them again</button></div>';
   }else{
-    h='<p class="eyebrow">Empty rail</p><h2>Nothing in your sizes yet</h2><p class="meta">Change your sizes or who you are shopping for to see more.</p>';
+    h='<p class="eyebrow">Empty rail</p><h2>Nothing matches yet</h2><p class="meta">Widen what you are looking for, raise your budget or change your sizes to see more.</p>';
   }
   $('info').innerHTML=h;
   $('actwrap').hidden=!c;
@@ -459,20 +535,34 @@ function showOnboard(step){
   $('ob1').hidden=step!==1;$('ob2').hidden=step!==2;
   if(step===2){
     var p=S.profile;$('fHeight').value=p.height;$('hOut').textContent=p.height;
+    catUI($('obCats'),S.profile.cats,null);budgetUI($('fBudget'));
     fill($('fTop'),SIZES,p.top);fill($('fBottom'),SIZES,p.bottom);fill($('fShoe'),eu(35,47),p.shoe);
   }
 }
 function showRoom(){
   $('onboard').hidden=true;$('room').hidden=false;$('chip').hidden=false;$('openCart').hidden=false;
+  catUI($('catChips'),S.profile.cats,refilter);budgetUI($('sBudget'));
   buildDeck();editor();draw(true);panel();loadLive();
 }
+var reqNo=0;
 function loadLive(){
-  var who=S.profile.who;
-  fetch('/api/catalogue?who='+who).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(d){
-    if(!d.items||!d.items.length||who!==S.profile.who)return;
+  var p=S.profile,no=++reqNo;
+  fetch('/api/catalogue?who='+p.who+'&max='+(p.budget||0)+'&cats='+p.cats.slice().sort().join(',')).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(d){
+    if(no!==reqNo||!d.items||!d.items.length)return;
     live=true;setCatalogue(d.items);S.idx=0;buildDeck();draw(true);panel();
   }).catch(function(){});
 }
+function catUI(el,arr,onchange){
+  el.innerHTML=CATS.map(function(c){return '<button type="button" data-c="'+c+'" aria-pressed="'+(arr.indexOf(c)>=0)+'">'+CATLABEL[c]+'</button>'}).join('');
+  el.onclick=function(e){
+    var b=e.target.closest('button');if(!b)return;var c=b.dataset.c,i=arr.indexOf(c);
+    if(i>=0){if(arr.length===1){toast('Keep at least one kind of clothing selected');return}arr.splice(i,1)}else arr.push(c);
+    catUI(el,arr,onchange);if(onchange)onchange();
+  };
+}
+function budgetUI(sel){sel.innerHTML=BUDGETS.map(function(b){return '<option value="'+b[0]+'"'+(b[0]===S.profile.budget?' selected':'')+'>'+b[1]+'</option>'}).join('')}
+function refilter(){save();S.idx=0;buildDeck();draw(true);panel();loadLive()}
+$('sBudget').onchange=function(){S.profile.budget=+this.value;refilter()};
 $('ob1').onclick=function(e){
   var b=e.target.closest('[data-who]');if(!b)return;
   var w=b.dataset.who;
@@ -483,7 +573,7 @@ $('fHeight').oninput=function(){$('hOut').textContent=this.value};
 $('backWho').onclick=function(){showOnboard(1)};
 $('ob2').addEventListener('submit',function(e){
   e.preventDefault();
-  S.profile.height=+$('fHeight').value;S.profile.top=$('fTop').value;S.profile.bottom=$('fBottom').value;S.profile.shoe=+$('fShoe').value;
+  S.profile.height=+$('fHeight').value;S.profile.top=$('fTop').value;S.profile.bottom=$('fBottom').value;S.profile.shoe=+$('fShoe').value;S.profile.budget=+$('fBudget').value;
   S.onboarded=true;S.idx=0;save();showRoom();
 });
 $('editProfile').onclick=function(){showOnboard(1)};

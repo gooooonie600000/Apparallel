@@ -38,7 +38,11 @@ function sizesOf(p) {
   return (size.values || []).filter((v) => v.exists !== false).map((v) => String(v.label)).slice(0, 14);
 }
 
+const KID_SIZE = /^\d+(\s*-\s*\d+)?\s*(y\+?|yrs?|years?|months?|mos?|t)$/i;
+
 function normalise(p, cat) {
+  if (p.age && p.age !== "adult") return null;
+  if (sizesOf(p).some((s) => KID_SIZE.test(s.trim()))) return null;
   const offer = (p.offers || []).find((o) => o.availability === "InStock" && o.price) || (p.offers || [])[0];
   const im = pickImage(p.images);
   if (!offer || !offer.price || !im) return null;
@@ -59,9 +63,13 @@ function normalise(p, cat) {
   };
 }
 
-async function search(key, s, gender) {
-  const body = { query: s.query, limit: 12 };
-  if (gender) body.filters = { gender };
+async function search(key, s, gender, maxPrice, limit) {
+  const who = gender === "female" ? "women's " : gender === "male" ? "men's " : "";
+  const body = { query: who + s.query, limit };
+  const filters = {};
+  if (gender) filters.gender = gender;
+  if (maxPrice) filters.price = { max_price: maxPrice };
+  if (Object.keys(filters).length) body.filters = filters;
   const r = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": key, "Content-Type": "application/json" },
@@ -81,7 +89,7 @@ function json(status, payload, cache) {
     // One fetch per shopper type per day keeps usage inside the free tier.
     headers["Cache-Control"] = "public, max-age=0, must-revalidate";
     headers["Netlify-CDN-Cache-Control"] = "public, durable, s-maxage=86400";
-    headers["Netlify-Vary"] = "query=who";
+    headers["Netlify-Vary"] = "query=who|max|cats";
   } else {
     headers["Cache-Control"] = "no-store";
   }
@@ -106,11 +114,18 @@ async function handle(req) {
     return json(200, { items: [], error: "No Channel3 key found in Netlify (looked for CHANNEL3_API_KEY and Apparallel).", similar_names: similar });
   }
 
-  const who = new URL(req.url).searchParams.get("who");
+  const params = new URL(req.url).searchParams;
+  const who = params.get("who");
   const gender = who === "w" ? "female" : who === "m" ? "male" : null;
-  const jobs = SEARCHES.filter((s) => s.skipFor !== gender);
+  const maxPrice = [50, 100, 200].includes(Number(params.get("max"))) ? Number(params.get("max")) : 0;
+  const wanted = (params.get("cats") || "").split(",").filter(Boolean);
+  let jobs = SEARCHES.filter((s) => s.skipFor !== gender);
+  if (wanted.length) jobs = jobs.filter((s) => wanted.includes(s.cat));
+  if (!jobs.length) return json(200, { items: [] });
+  // Fewer kinds of clothing asked for means more of each.
+  const limit = Math.max(12, Math.min(30, Math.floor(72 / jobs.length)));
 
-  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender)));
+  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit)));
   const lists = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
   if (!lists.length) {
     const why = results[0] && results[0].reason ? String(results[0].reason.message) : "unknown error";
@@ -120,7 +135,7 @@ async function handle(req) {
   // Deal the lists out in turn so categories mix on the rail.
   const seen = new Set();
   const items = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < limit; i++) {
     for (const list of lists) {
       const it = list[i];
       if (it && !seen.has(it.id)) { seen.add(it.id); items.push(it); }
