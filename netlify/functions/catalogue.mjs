@@ -97,8 +97,13 @@ export default async (req) => {
 };
 
 async function handle(req) {
-  const key = process.env.CHANNEL3_API_KEY;
-  if (!key) return json(200, { items: [], error: "CHANNEL3_API_KEY is not set in Netlify." });
+  const fromNetlify = globalThis.Netlify && globalThis.Netlify.env && globalThis.Netlify.env.get("CHANNEL3_API_KEY");
+  const key = (fromNetlify || process.env.CHANNEL3_API_KEY || "").trim();
+  if (!key) {
+    // Names only, never values: helps spot a misspelt variable.
+    const similar = Object.keys(process.env).filter((k) => /channel|api_?key/i.test(k));
+    return json(200, { items: [], error: "CHANNEL3_API_KEY is not set in Netlify.", similar_names: similar });
+  }
 
   const who = new URL(req.url).searchParams.get("who");
   const gender = who === "w" ? "female" : who === "m" ? "male" : null;
