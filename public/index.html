@@ -159,6 +159,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="field"><label for="fShoe">Shoe size (EU)</label><select id="fShoe"></select></div>
       <div class="field"><label for="fBudget">Budget per piece</label><select id="fBudget"></select></div>
       <div class="field wide"><span class="lab">Looking for</span><div class="seg" id="obCats"></div></div>
+      <div class="field wide"><span class="lab">Styles you like (pick any, or none)</span><div class="seg" id="obStyles"></div></div>
     </div>
     <div class="obrow"><button class="primary" type="submit">Step into the fitting room</button><button class="linkbtn" type="button" id="backWho">Back</button></div>
   </form>
@@ -182,9 +183,12 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <p class="hint" id="srcNote">These are sample pieces. Real products appear here once the catalogue is connected.</p>
     <p class="hint" id="hiddenNote" hidden></p>
     <div class="panel">
-      <h3>Looking for</h3>
-      <div class="seg" id="catChips"></div>
+      <h3>Your feed</h3>
+      <div class="row"><span class="lab">Show me</span><div class="seg" id="feedSeg"></div></div>
+      <div class="row"><span class="lab">Looking for</span><div class="seg" id="catChips"></div></div>
       <div class="row"><label for="sBudget">Budget per piece</label><select id="sBudget"></select></div>
+      <p class="hint">For you learns from every swipe. A style keeps the feed to that look and still puts your kind of piece first.</p>
+      <div><button class="linkbtn" type="button" id="resetTaste">Forget what the feed has learned</button></div>
     </div>
     <div class="panel">
       <h3>Your mannequin</h3>
@@ -253,6 +257,44 @@ var CATLABEL={top:'Tops',bottom:'Bottoms',dress:'Dresses',outer:'Jackets',shoes:
 var BUDGETS=[[0,'Any price'],[50,'Under 50'],[100,'Under 100'],[200,'Under 200']];
 if(!S.profile.cats||!S.profile.cats.length)S.profile.cats=CATS.slice();
 if(!S.profile.budget)S.profile.budget=0;
+var STYLES=[['street','Streetwear'],['minimal','Minimal'],['vintage','Vintage'],['sporty','Sporty'],['smart','Smart'],['y2k','Y2K']];
+var STYLENAME={};STYLES.forEach(function(s){STYLENAME[s[0]]=s[1]});
+if(!S.style)S.style='foryou';
+if(!S.likes)S.likes=[];
+if(!S.taste)S.taste={};
+
+/* The feed. Every piece is described by a handful of traits; a right swipe raises the
+   weight of its traits and a left swipe lowers them. The rail is then ordered by how
+   well each piece matches, without showing the same kind of clothing twice in a row. */
+var KW=['oversized','cropped','slim','relaxed','baggy','wide','straight','skinny','graphic','logo','striped','floral','denim','leather','linen','knit','fleece','cargo','pleated','retro','zip','hooded','crew','polo','mini','midi','maxi','chunky','running'];
+function feats(it){
+  var f=[['cat:'+it.cat,.3],['price:'+(it.price<30?'low':it.price<75?'mid':it.price<150?'high':'lux'),.5]];
+  if(it.brand)f.push(['brand:'+it.brand,.6]);
+  if(it.style)f.push(['style:'+it.style,1]);
+  if(it.hue)f.push(['col:'+it.hue,.7]);
+  var t=' '+String(it.name).toLowerCase()+' ';
+  KW.forEach(function(k){if(t.indexOf(k)>=0)f.push(['kw:'+k,.8])});
+  return f;
+}
+function score(it){var s=0;feats(it).forEach(function(f){s+=(S.taste[f[0]]||0)*f[1]});return s}
+function learn(it,dir){feats(it).forEach(function(f){S.taste[f[0]]=Math.max(-4,Math.min(6,(S.taste[f[0]]||0)+(dir>0?1:-.4)))})}
+function seedTaste(){S.likes.forEach(function(s){var k='style:'+s;if((S.taste[k]||0)<2)S.taste[k]=2})}
+function topStyle(){var best=null,bs=.99;STYLES.forEach(function(s){var w=S.taste['style:'+s[0]]||0;if(w>bs){bs=w;best=s[0]}});return best}
+function why(it){
+  var out=[];
+  feats(it).map(function(f){return [f[0],(S.taste[f[0]]||0)*f[1]]}).filter(function(f){return f[1]>.6&&/^(kw|col|style|brand):/.test(f[0])})
+    .sort(function(a,b){return b[1]-a[1]}).slice(0,3).forEach(function(f){var v=f[0].split(':');out.push(v[0]==='style'?STYLENAME[v[1]]||v[1]:v[1])});
+  return out;
+}
+function order(items){
+  var pool=items.map(function(it,i){return {it:it,s:score(it)-i*.02}}),out=[],last=null;
+  while(pool.length){
+    var bi=0,bs=-1e9;
+    for(var i=0;i<pool.length;i++){var v=pool[i].s-(pool[i].it.cat===last?1.2:0);if(v>bs){bs=v;bi=i}}
+    var p=pool.splice(bi,1)[0];out.push(p.it.id);last=p.it.cat;
+  }
+  return out;
+}
 function save(){try{localStorage.setItem('apparallel-v2',JSON.stringify(S))}catch(e){}}
 
 var deck=[],hiddenCount=0,busy=false;
@@ -266,15 +308,16 @@ function fits(it){
 }
 function mySize(it){return it.cat==='shoes'?S.profile.shoe:(it.cat==='bottom'?S.profile.bottom:S.profile.top)}
 function buildDeck(){
-  deck=[];hiddenCount=0;
+  deck=[];hiddenCount=0;var ok=[];
   CATALOGUE.forEach(function(it){
     var okWho=S.profile.who==='all'||it.g==='u'||it.g===S.profile.who;
     if(!okWho)return;
     if(S.profile.cats.indexOf(it.cat)<0)return;
     if(S.profile.budget&&it.price>S.profile.budget)return;
     if(!fits(it)){hiddenCount++;return}
-    deck.push(it.id);
+    ok.push(it);
   });
+  deck=order(ok);
   if(S.idx>deck.length)S.idx=deck.length;
 }
 function cand(){return S.idx<deck.length?byId[deck[S.idx]]:null}
@@ -425,6 +468,7 @@ function panel(){
     var me=String(mySize(c)).toUpperCase();
     h='<p class="eyebrow">Piece '+(S.idx+1)+' of '+deck.length+'</p><h2>'+esc(c.name)+'</h2>'+
       '<p class="meta">'+(c.brand?esc(c.brand)+' · ':'')+esc(c.store)+' · '+CATNAME[c.cat]+'</p><p class="price">'+money(c.price,c.cur)+'</p>'+
+      (why(c).length?'<p class="hint">Matches your taste: '+esc(why(c).join(', '))+'</p>':'')+
       (c.sizes&&c.sizes.length?'<div class="sizes" aria-label="Sizes listed">'+c.sizes.map(function(s){var m=String(s).toUpperCase()===me;return '<span'+(m?' class="me"':'')+'>'+esc(s)+(m?' · yours':'')+'</span>'}).join('')+'</div>':'<p class="hint">Sizes are listed at the store.</p>');
   }else if(deck.length){
     h='<p class="eyebrow">End of the rail</p><h2>You have seen every piece</h2><p class="meta">Your picks are waiting in your parallel universe.</p>'+
@@ -459,7 +503,9 @@ function decide(dir){
       if(S.cart.indexOf(c.id)<0)S.cart.push(c.id);
       toast(c.name+' is in your parallel universe');
     }
-    S.idx++;busy=false;badges(0);save();draw(true);panel();
+    learn(c,dir);S.idx++;
+    deck=deck.slice(0,S.idx).concat(order(deck.slice(S.idx).map(function(id){return byId[id]})));
+    busy=false;badges(0);save();draw(true);panel();
   },280);
 }
 function badges(dx){
@@ -535,23 +581,45 @@ function showOnboard(step){
   $('ob1').hidden=step!==1;$('ob2').hidden=step!==2;
   if(step===2){
     var p=S.profile;$('fHeight').value=p.height;$('hOut').textContent=p.height;
-    catUI($('obCats'),S.profile.cats,null);budgetUI($('fBudget'));
+    catUI($('obCats'),S.profile.cats,null);budgetUI($('fBudget'));likesUI();
     fill($('fTop'),SIZES,p.top);fill($('fBottom'),SIZES,p.bottom);fill($('fShoe'),eu(35,47),p.shoe);
   }
 }
 function showRoom(){
   $('onboard').hidden=true;$('room').hidden=false;$('chip').hidden=false;$('openCart').hidden=false;
-  catUI($('catChips'),S.profile.cats,refilter);budgetUI($('sBudget'));
+  feedUI();catUI($('catChips'),S.profile.cats,refilter);budgetUI($('sBudget'));
   buildDeck();editor();draw(true);panel();loadLive();
 }
 var reqNo=0;
-function loadLive(){
-  var p=S.profile,no=++reqNo;
-  fetch('/api/catalogue?who='+p.who+'&max='+(p.budget||0)+'&cats='+p.cats.slice().sort().join(',')).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(d){
-    if(no!==reqNo||!d.items||!d.items.length)return;
-    live=true;setCatalogue(d.items);S.idx=0;buildDeck();draw(true);panel();
-  }).catch(function(){});
+function getFeed(style){
+  var p=S.profile;
+  return fetch('/api/catalogue?who='+p.who+'&max='+(p.budget||0)+'&cats='+p.cats.slice().sort().join(',')+(style?'&style='+style:''))
+    .then(function(r){return r.ok?r.json():{items:[]}}).then(function(d){return d.items||[]}).catch(function(){return []});
 }
+function loadLive(){
+  var no=++reqNo,jobs;
+  if(S.style==='foryou'){var t=topStyle();jobs=t?[getFeed(t),getFeed('')]:[getFeed('')]}
+  else jobs=[getFeed(S.style)];
+  Promise.all(jobs).then(function(ls){
+    if(no!==reqNo)return;
+    var seen={},all=[],n=0,i;
+    ls.forEach(function(l){if(l.length>n)n=l.length});
+    for(i=0;i<n;i++)ls.forEach(function(l){var it=l[i];if(it&&!seen[it.id]){seen[it.id]=1;all.push(it)}});
+    if(!all.length)return;
+    live=true;setCatalogue(all);S.idx=0;buildDeck();draw(true);panel();
+  });
+}
+function feedUI(){
+  var el=$('feedSeg'),opts=[['foryou','For you']].concat(STYLES);
+  el.innerHTML=opts.map(function(o){return '<button type="button" data-s="'+o[0]+'" aria-pressed="'+(S.style===o[0])+'">'+o[1]+'</button>'}).join('');
+  el.onclick=function(e){var b=e.target.closest('button');if(!b||b.dataset.s===S.style)return;S.style=b.dataset.s;feedUI();refilter()};
+}
+function likesUI(){
+  var el=$('obStyles');
+  el.innerHTML=STYLES.map(function(o){return '<button type="button" data-s="'+o[0]+'" aria-pressed="'+(S.likes.indexOf(o[0])>=0)+'">'+o[1]+'</button>'}).join('');
+  el.onclick=function(e){var b=e.target.closest('button');if(!b)return;var i=S.likes.indexOf(b.dataset.s);if(i>=0)S.likes.splice(i,1);else S.likes.push(b.dataset.s);likesUI()};
+}
+$('resetTaste').onclick=function(){S.taste={};seedTaste();toast('The feed has forgotten your swipes');refilter()};
 function catUI(el,arr,onchange){
   el.innerHTML=CATS.map(function(c){return '<button type="button" data-c="'+c+'" aria-pressed="'+(arr.indexOf(c)>=0)+'">'+CATLABEL[c]+'</button>'}).join('');
   el.onclick=function(e){
@@ -573,7 +641,7 @@ $('fHeight').oninput=function(){$('hOut').textContent=this.value};
 $('backWho').onclick=function(){showOnboard(1)};
 $('ob2').addEventListener('submit',function(e){
   e.preventDefault();
-  S.profile.height=+$('fHeight').value;S.profile.top=$('fTop').value;S.profile.bottom=$('fBottom').value;S.profile.shoe=+$('fShoe').value;S.profile.budget=+$('fBudget').value;
+  S.profile.height=+$('fHeight').value;S.profile.top=$('fTop').value;S.profile.bottom=$('fBottom').value;S.profile.shoe=+$('fShoe').value;S.profile.budget=+$('fBudget').value;seedTaste();
   S.onboarded=true;S.idx=0;save();showRoom();
 });
 $('editProfile').onclick=function(){showOnboard(1)};

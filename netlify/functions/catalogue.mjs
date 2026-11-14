@@ -13,6 +13,37 @@ const SEARCHES = [
   { cat: "shoes", query: "sneakers" },
 ];
 
+const STYLE_WORDS = {
+  street: "streetwear",
+  minimal: "minimalist",
+  vintage: "vintage style",
+  sporty: "athleisure",
+  smart: "smart casual",
+  y2k: "y2k",
+};
+
+// Names the main colour of a piece so the feed can learn colour taste.
+function hueName(colors) {
+  const c = (colors || []).slice().sort((a, b) => (b.percentage || 0) - (a.percentage || 0))[0];
+  if (!c || !/^#?[0-9a-f]{6}$/i.test(c.hex || "")) return "";
+  const n = parseInt(c.hex.replace("#", ""), 16);
+  const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (l < 0.16) return "black";
+  if (l > 0.86 && s < 0.25) return "white";
+  if (s < 0.14) return "grey";
+  let hdeg = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  hdeg = (hdeg * 60 + 360) % 360;
+  if (hdeg < 15 || hdeg >= 345) return "red";
+  if (hdeg < 45) return l < 0.45 ? "brown" : "orange";
+  if (hdeg < 68) return s < 0.45 ? "beige" : "yellow";
+  if (hdeg < 170) return "green";
+  if (hdeg < 260) return "blue";
+  if (hdeg < 300) return "purple";
+  return "pink";
+}
+
 const GOOD_SHOTS = ["flat_lay", "hero", "angle_view"];
 const BAD_SHOTS = ["on_model", "lifestyle", "in_use", "size_chart", "packaging", "product_information", "merchant_information"];
 
@@ -40,7 +71,7 @@ function sizesOf(p) {
 
 const KID_SIZE = /^\d+(\s*-\s*\d+)?\s*(y\+?|yrs?|years?|months?|mos?|t)$/i;
 
-function normalise(p, cat) {
+function normalise(p, cat, style) {
   if (p.age && p.age !== "adult") return null;
   if (sizesOf(p).some((s) => KID_SIZE.test(s.trim()))) return null;
   const offer = (p.offers || []).find((o) => o.availability === "InStock" && o.price) || (p.offers || [])[0];
@@ -59,13 +90,16 @@ function normalise(p, cat) {
     g: p.gender === "female" ? "w" : p.gender === "male" ? "m" : "u",
     img: im.cleaned_url || im.url,
     cut: Boolean(im.cleaned_url),
+    style: style || "",
+    hue: hueName(p.colors),
     sizes: sizesOf(p),
   };
 }
 
-async function search(key, s, gender, maxPrice, limit) {
+async function search(key, s, gender, maxPrice, limit, style) {
   const who = gender === "female" ? "women's " : gender === "male" ? "men's " : "";
-  const body = { query: who + s.query, limit };
+  const look = style ? STYLE_WORDS[style] + " " : "";
+  const body = { query: who + look + s.query, limit };
   const filters = {};
   if (gender) filters.gender = gender;
   if (maxPrice) filters.price = { max_price: maxPrice };
@@ -80,7 +114,7 @@ async function search(key, s, gender, maxPrice, limit) {
     throw new Error("Channel3 answered " + r.status + " " + detail);
   }
   const data = await r.json();
-  return (data.products || []).map((p) => normalise(p, s.cat)).filter(Boolean);
+  return (data.products || []).map((p) => normalise(p, s.cat, style)).filter(Boolean);
 }
 
 function json(status, payload, cache) {
@@ -89,7 +123,7 @@ function json(status, payload, cache) {
     // One fetch per shopper type per day keeps usage inside the free tier.
     headers["Cache-Control"] = "public, max-age=0, must-revalidate";
     headers["Netlify-CDN-Cache-Control"] = "public, durable, s-maxage=86400";
-    headers["Netlify-Vary"] = "query=who|max|cats";
+    headers["Netlify-Vary"] = "query=who|max|cats|style";
   } else {
     headers["Cache-Control"] = "no-store";
   }
@@ -118,6 +152,7 @@ async function handle(req) {
   const who = params.get("who");
   const gender = who === "w" ? "female" : who === "m" ? "male" : null;
   const maxPrice = [50, 100, 200].includes(Number(params.get("max"))) ? Number(params.get("max")) : 0;
+  const style = STYLE_WORDS[params.get("style")] ? params.get("style") : "";
   const wanted = (params.get("cats") || "").split(",").filter(Boolean);
   let jobs = SEARCHES.filter((s) => s.skipFor !== gender);
   if (wanted.length) jobs = jobs.filter((s) => wanted.includes(s.cat));
@@ -125,7 +160,7 @@ async function handle(req) {
   // Fewer kinds of clothing asked for means more of each.
   const limit = Math.max(12, Math.min(30, Math.floor(72 / jobs.length)));
 
-  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit)));
+  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit, style)));
   const lists = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
   if (!lists.length) {
     const why = results[0] && results[0].reason ? String(results[0].reason.message) : "unknown error";
