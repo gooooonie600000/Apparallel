@@ -5,7 +5,7 @@ Swipe clothes onto a mannequin; the ones you keep land in one cart, sorted by st
 ## Layout
 
 - `public/` — the site Netlify serves. `index.html` is the working prototype (sample catalogue, invented stores).
-- `netlify/functions/` — backend functions. Empty for now; the product-data fetch will live here so API keys stay off the page.
+- `netlify/functions/catalogue.mjs` — fetches real products from Channel3 and serves them at `/api/catalogue`. Needs the `CHANNEL3_API_KEY` environment variable in Netlify. Without it the page falls back to the sample pieces.
 - `netlify.toml` — tells Netlify to publish `public/` and where functions are.
 
 ## Deploying
@@ -14,6 +14,6 @@ Connect this repository in Netlify (Add new site → Import from Git). No build 
 
 ## Next
 
-1. Pick a product data source and add its key as a Netlify environment variable.
-2. Add a `catalogue` function that returns real products in the shape the page expects.
-3. Replace the drawn garments with cut-out product photos fitted to the mannequin.
+1. Confirm real products load and check which stores and currencies come back.
+2. Fit product photos to the mannequin properly (they are placed over it for now).
+3. Add a Singapore data source; Channel3 does not list Singapore or SGD.

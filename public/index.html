@@ -112,6 +112,9 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .line .n{flex:1;min-width:0}
 .line .n small{display:block;color:var(--muted);font-size:12px}
 .line .p{font-variant-numeric:tabular-nums}
+#fig image{pointer-events:none}
+.line img{width:34px;height:34px;object-fit:contain;border-radius:6px;background:var(--bg);flex:none}
+.line .buy{color:var(--accent);font-weight:600;font-size:13px;white-space:nowrap}
 .line button{background:none;border:0;color:var(--muted);padding:4px 6px;font-size:15px}
 .store .go{background:var(--ink);color:var(--bg);border:0;border-radius:10px;padding:11px;font-weight:600}
 .cfoot{border-top:1px solid var(--line);padding:16px 20px;display:flex;justify-content:space-between;font-family:var(--display);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums}
@@ -174,6 +177,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       </div>
       <p class="hint" style="margin-top:10px">Drag the piece off the mannequin, or use the arrow keys. Pieces you add stay on so you can build an outfit.</p>
     </div>
+    <p class="hint" id="srcNote">These are sample pieces. Real products appear here once the catalogue is connected.</p>
     <p class="hint" id="hiddenNote" hidden></p>
     <div class="panel">
       <h3>Your mannequin</h3>
@@ -227,25 +231,34 @@ var CATALOGUE=[
  {id:'t7',name:'Pocket Tee in Moss',store:'Kopi Club',price:32,cat:'top',style:'tee',color:'#6E8B5B',g:'u',sizes:rg('M','XXL')},
  {id:'t8',name:'Linen Shirt in Sage',store:'Tidewear',price:54,cat:'top',style:'shirt',color:'#B9C7AE',g:'u',sizes:rg('XS','L')}
 ];
-var byId={};CATALOGUE.forEach(function(i){byId[i.id]=i});
+var SAMPLE=CATALOGUE,byId={},live=false;
+function setCatalogue(list){CATALOGUE=list;byId={};list.forEach(function(i){byId[i.id]=i})}
+setCatalogue(SAMPLE);
+function item(id){return byId[id]||(S.items&&S.items[id])}
 var CATNAME={top:'Top',bottom:'Bottom',dress:'Dress',outer:'Jacket',shoes:'Shoes'};
 var WHO={w:'Women',m:'Men',all:'Everyone'};
 var SKINS=['#F3D3BC','#E2B48F','#C68E64','#96623F','#5B3A26'];
 
-var S={onboarded:false,profile:{who:'w',height:165,top:'M',bottom:'M',shoe:38},look:{skin:1,hair:'short',build:'regular'},worn:{},cart:[],idx:0};
-try{var raw=localStorage.getItem('apparallel-v1');if(raw){var o=JSON.parse(raw);for(var k in o)S[k]=o[k]}}catch(e){}
-function save(){try{localStorage.setItem('apparallel-v1',JSON.stringify(S))}catch(e){}}
+var S={onboarded:false,profile:{who:'w',height:165,top:'M',bottom:'M',shoe:38},look:{skin:1,hair:'short',build:'regular'},worn:{},cart:[],items:{},idx:0};
+try{var raw=localStorage.getItem('apparallel-v2');if(raw){var o=JSON.parse(raw);for(var k in o)S[k]=o[k]}}catch(e){}
+function save(){try{localStorage.setItem('apparallel-v2',JSON.stringify(S))}catch(e){}}
 
 var deck=[],hiddenCount=0,busy=false;
 function $(id){return document.getElementById(id)}
-function money(n){return 'S$'+n.toFixed(2)}
+function money(n,cur){cur=cur||'SGD';var p={SGD:'S$',USD:'US$',GBP:'£',EUR:'€',AUD:'A$',CAD:'C$'}[cur];return (p||cur+' ')+Number(n).toFixed(2)}
+function fits(it){
+  if(!it.sizes||!it.sizes.length)return true;
+  var me=String(mySize(it)).toUpperCase(),labels=it.sizes.map(function(l){return String(l).toUpperCase()});
+  if(it.live){if(it.cat==='shoes'||!labels.some(function(l){return SIZES.indexOf(l)>=0}))return true}
+  return labels.indexOf(me)>=0;
+}
 function mySize(it){return it.cat==='shoes'?S.profile.shoe:(it.cat==='bottom'?S.profile.bottom:S.profile.top)}
 function buildDeck(){
   deck=[];hiddenCount=0;
   CATALOGUE.forEach(function(it){
     var okWho=S.profile.who==='all'||it.g==='u'||it.g===S.profile.who;
     if(!okWho)return;
-    if(it.sizes.indexOf(mySize(it))<0){hiddenCount++;return}
+    if(!fits(it)){hiddenCount++;return}
     deck.push(it.id);
   });
   if(S.idx>deck.length)S.idx=deck.length;
@@ -283,7 +296,11 @@ var G={
  sneaker:function(c){return wrap(c,mir('<path d="M111,532 L146,532 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 Z"/><path d="M101,556 L149,556" fill="none" stroke-width="2.6"/><path d="M118,540 L134,540 M117,546 L133,546" fill="none"/>'))},
  boot:function(c){return wrap(c,mir('<path d="M116,498 L146,498 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 L116,538 Z"/><path d="M101,557 L149,557" fill="none" stroke-width="3"/><path d="M130,500 L130,530" fill="none"/>'))}
 };
-function garment(it){return G[it.style](it.color)}
+var BOX={top:[62,96,176],outer:[52,90,196],dress:[10,92,280],bottom:[20,250,260],shoes:[100,478,100]};
+function garment(it){
+  if(it.img){var b=BOX[it.cat];return '<image href="'+esc(it.img)+'" x="'+b[0]+'" y="'+b[1]+'" width="'+b[2]+'" height="'+b[2]+'" preserveAspectRatio="xMidYMid meet"/>'}
+  return G[it.style](it.color);
+}
 
 function draw(drop){
   var c=cand(),L=S.look,skin=SKINS[L.skin],sk2=shade(skin,.78);
@@ -296,8 +313,8 @@ function draw(drop){
     pv[c.cat]=c.id;
   }
   function layer(slot){
-    var id=pv[slot];if(!id||!byId[id])return '';
-    var g=garment(byId[id]);
+    var id=pv[slot];if(!id||!item(id))return '';
+    var g=garment(item(id));
     return (c&&c.id===id)?'<g id="candWrap"><g class="'+(drop?'drop':'')+'">'+g+'</g></g>':g;
   }
   var hairC='#2B2322',hairS='#4A3E3B';
@@ -315,8 +332,8 @@ function draw(drop){
     tag='<g class="swing"><path d="M'+hx+',292 L226,340" stroke="'+sk2+'" stroke-width="1.2" fill="none"/>'+
       '<g transform="translate(214 320) rotate(6)"><path d="M0,20 L14,0 L124,0 L124,40 L14,40 Z" fill="#F4C542" stroke="#9C7A14" stroke-width="1.2" stroke-linejoin="round"/>'+
       '<circle cx="12" cy="20" r="3" fill="#FFF8DC" stroke="#9C7A14" stroke-width="1"/>'+
-      '<text x="22" y="18" font-family="Bricolage Grotesque, sans-serif" font-size="13.5" font-weight="700" fill="#1B1B1B">🏷️ '+money(c.price)+'</text>'+
-      '<text x="24" y="32" font-family="Instrument Sans, sans-serif" font-size="9.5" fill="#4A3B0A">'+c.store+'</text></g></g>';
+      '<text x="22" y="18" font-family="Bricolage Grotesque, sans-serif" font-size="13.5" font-weight="700" fill="#1B1B1B">🏷️ '+money(c.price,c.cur)+'</text>'+
+      '<text x="24" y="32" font-family="Instrument Sans, sans-serif" font-size="9.5" fill="#4A3B0A">'+esc(String(c.store).slice(0,22))+'</text></g></g>';
   }
   $('fig').innerHTML='<ellipse cx="150" cy="566" rx="'+(92*hs)+'" ry="9" fill="#000" opacity=".13"/>'+
     '<g transform="translate(150 566) scale('+hs+') translate(-150 -566)">'+
@@ -329,10 +346,10 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(m){return {'&':'&amp
 function panel(){
   var c=cand(),h;
   if(c){
-    var me=mySize(c);
+    var me=String(mySize(c)).toUpperCase();
     h='<p class="eyebrow">Piece '+(S.idx+1)+' of '+deck.length+'</p><h2>'+esc(c.name)+'</h2>'+
-      '<p class="meta">'+esc(c.store)+' · '+CATNAME[c.cat]+'</p><p class="price">'+money(c.price)+'</p>'+
-      '<div class="sizes" aria-label="Sizes in stock">'+c.sizes.map(function(s){return '<span'+(s===me?' class="me"':'')+'>'+s+(s===me?' · yours':'')+'</span>'}).join('')+'</div>';
+      '<p class="meta">'+(c.brand?esc(c.brand)+' · ':'')+esc(c.store)+' · '+CATNAME[c.cat]+'</p><p class="price">'+money(c.price,c.cur)+'</p>'+
+      (c.sizes&&c.sizes.length?'<div class="sizes" aria-label="Sizes listed">'+c.sizes.map(function(s){var m=String(s).toUpperCase()===me;return '<span'+(m?' class="me"':'')+'>'+esc(s)+(m?' · yours':'')+'</span>'}).join('')+'</div>':'<p class="hint">Sizes are listed at the store.</p>');
   }else if(deck.length){
     h='<p class="eyebrow">End of the rail</p><h2>You have seen every piece</h2><p class="meta">Your picks are waiting in your parallel universe.</p>'+
       '<div><button class="primary" type="button" id="again">Go through them again</button></div>';
@@ -341,6 +358,7 @@ function panel(){
   }
   $('info').innerHTML=h;
   $('actwrap').hidden=!c;
+  $('srcNote').hidden=live;
   var hn=$('hiddenNote');hn.hidden=!hiddenCount;
   hn.textContent=hiddenCount+(hiddenCount===1?' piece is':' pieces are')+' off the rail because '+(hiddenCount===1?'it is':'they are')+' not stocked in your size.';
   var a=$('again');if(a)a.onclick=function(){S.idx=0;save();draw(true);panel()};
@@ -361,7 +379,7 @@ function decide(dir){
   if(w){w.style.transition='transform .28s ease-in, opacity .28s ease-in';w.style.transform='translate('+(dir*380)+'px,-20px) rotate('+(dir*24)+'deg)';w.style.opacity='0'}
   setTimeout(function(){
     if(dir>0){
-      wear(c);
+      wear(c);S.items[c.id]=c;
       if(S.cart.indexOf(c.id)<0)S.cart.push(c.id);
       toast(c.name+' is in your parallel universe');
     }
@@ -412,16 +430,16 @@ $('clearFit').onclick=function(){S.worn={};save();draw(false)};
 
 /* ---------- cart ---------- */
 function renderCart(){
-  var groups={},order=[],total=0;
-  S.cart.forEach(function(id){var it=byId[id];if(!it)return;if(!groups[it.store]){groups[it.store]=[];order.push(it.store)}groups[it.store].push(it);total+=it.price});
+  var groups={},order=[],total=0,cur;
+  S.cart.forEach(function(id){var it=item(id);if(!it)return;cur=cur||it.cur;if(!groups[it.store]){groups[it.store]=[];order.push(it.store)}groups[it.store].push(it);total+=it.price});
   var h=order.length?'':'<p class="empty">Nothing here yet. Add a piece from the mannequin and it lands here.</p>';
   order.forEach(function(s){
-    var sub=groups[s].reduce(function(a,i){return a+i.price},0),n=groups[s].length;
-    h+='<div class="store"><h3><span>'+esc(s)+'</span><span>'+money(sub)+'</span></h3>'+
-      groups[s].map(function(i){return '<div class="line"><i style="background:'+i.color+'"></i><span class="n">'+esc(i.name)+'<small>'+CATNAME[i.cat]+' · size '+mySize(i)+'</small></span><span class="p">'+money(i.price)+'</span><button type="button" data-rm="'+i.id+'" aria-label="Remove '+esc(i.name)+'">✕</button></div>'}).join('')+
-      '<button class="go" type="button" data-go="'+esc(s)+'" data-n="'+n+'">Check out at '+esc(s)+' ↗</button></div>';
+    var sub=groups[s].reduce(function(a,i){return a+i.price},0),n=groups[s].length,linked=groups[s].every(function(i){return i.url});
+    h+='<div class="store"><h3><span>'+esc(s)+'</span><span>'+money(sub,groups[s][0].cur)+'</span></h3>'+
+      groups[s].map(function(i){return '<div class="line">'+(i.img?'<img src="'+esc(i.img)+'" alt="">':'<i style="background:'+i.color+'"></i>')+'<span class="n">'+esc(i.name)+'<small>'+CATNAME[i.cat]+(i.live?'':' · size '+mySize(i))+'</small></span><span class="p">'+money(i.price,i.cur)+'</span>'+(i.url?'<a class="buy" href="'+esc(i.url)+'" target="_blank" rel="noopener">Buy ↗</a>':'')+'<button type="button" data-rm="'+esc(i.id)+'" aria-label="Remove '+esc(i.name)+'">✕</button></div>'}).join('')+
+      (linked?'<p class="hint">Each Buy link opens the piece at '+esc(s)+'.</p>':'<button class="go" type="button" data-go="'+esc(s)+'" data-n="'+n+'">Check out at '+esc(s)+' ↗</button>')+'</div>';
   });
-  $('cbody').innerHTML=h;$('ctotal').textContent=money(total);$('cartCount').textContent=S.cart.length;
+  $('cbody').innerHTML=h;$('ctotal').textContent=money(total,cur);$('cartCount').textContent=S.cart.length;
 }
 $('cbody').onclick=function(e){
   var r=e.target.closest('[data-rm]'),g=e.target.closest('[data-go]');
@@ -446,7 +464,14 @@ function showOnboard(step){
 }
 function showRoom(){
   $('onboard').hidden=true;$('room').hidden=false;$('chip').hidden=false;$('openCart').hidden=false;
-  buildDeck();editor();draw(true);panel();
+  buildDeck();editor();draw(true);panel();loadLive();
+}
+function loadLive(){
+  var who=S.profile.who;
+  fetch('/api/catalogue?who='+who).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(d){
+    if(!d.items||!d.items.length||who!==S.profile.who)return;
+    live=true;setCatalogue(d.items);S.idx=0;buildDeck();draw(true);panel();
+  }).catch(function(){});
 }
 $('ob1').onclick=function(e){
   var b=e.target.closest('[data-who]');if(!b)return;
