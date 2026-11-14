@@ -97,12 +97,13 @@ export default async (req) => {
 };
 
 async function handle(req) {
-  const fromNetlify = globalThis.Netlify && globalThis.Netlify.env && globalThis.Netlify.env.get("CHANNEL3_API_KEY");
-  const key = (fromNetlify || process.env.CHANNEL3_API_KEY || "").trim();
+  // The key is stored in Netlify as "Apparallel"; CHANNEL3_API_KEY also works.
+  const env = (name) => (globalThis.Netlify && globalThis.Netlify.env && globalThis.Netlify.env.get(name)) || process.env[name];
+  const key = (env("CHANNEL3_API_KEY") || env("Apparallel") || "").trim();
   if (!key) {
     // Names only, never values: helps spot a misspelt variable.
     const similar = Object.keys(process.env).filter((k) => /channel|api_?key/i.test(k));
-    return json(200, { items: [], error: "CHANNEL3_API_KEY is not set in Netlify.", similar_names: similar });
+    return json(200, { items: [], error: "No Channel3 key found in Netlify (looked for CHANNEL3_API_KEY and Apparallel).", similar_names: similar });
   }
 
   const who = new URL(req.url).searchParams.get("who");

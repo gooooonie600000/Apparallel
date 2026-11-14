@@ -5,7 +5,7 @@ Swipe clothes onto a mannequin; the ones you keep land in one cart, sorted by st
 ## Layout
 
 - `public/` — the site Netlify serves. `index.html` is the working prototype (sample catalogue, invented stores).
-- `netlify/functions/catalogue.mjs` — fetches real products from Channel3 and serves them at `/api/catalogue`. Needs the `CHANNEL3_API_KEY` environment variable in Netlify. Without it the page falls back to the sample pieces.
+- `netlify/functions/catalogue.mjs` — fetches real products from Channel3 and serves them at `/api/catalogue`. Needs the Channel3 key in a Netlify environment variable named `Apparallel` (or `CHANNEL3_API_KEY`). Without it the page falls back to the sample pieces.
 - `netlify.toml` — tells Netlify to publish `public/` and where functions are.
 
 ## Deploying
