@@ -67,7 +67,10 @@ async function search(key, s, gender) {
     headers: { "x-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error("Channel3 answered " + r.status);
+  if (!r.ok) {
+    const detail = (await r.text().catch(() => "")).slice(0, 200);
+    throw new Error("Channel3 answered " + r.status + " " + detail);
+  }
   const data = await r.json();
   return (data.products || []).map((p) => normalise(p, s.cat)).filter(Boolean);
 }
@@ -86,8 +89,16 @@ function json(status, payload, cache) {
 }
 
 export default async (req) => {
+  try {
+    return await handle(req);
+  } catch (e) {
+    return json(200, { items: [], error: "Function crashed: " + String(e && e.message) });
+  }
+};
+
+async function handle(req) {
   const key = process.env.CHANNEL3_API_KEY;
-  if (!key) return json(503, { error: "CHANNEL3_API_KEY is not set in Netlify." });
+  if (!key) return json(200, { items: [], error: "CHANNEL3_API_KEY is not set in Netlify." });
 
   const who = new URL(req.url).searchParams.get("who");
   const gender = who === "w" ? "female" : who === "m" ? "male" : null;
@@ -97,7 +108,7 @@ export default async (req) => {
   const lists = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
   if (!lists.length) {
     const why = results[0] && results[0].reason ? String(results[0].reason.message) : "unknown error";
-    return json(502, { error: "Could not load products: " + why });
+    return json(200, { items: [], error: "Could not load products: " + why });
   }
 
   // Deal the lists out in turn so categories mix on the rail.
@@ -110,6 +121,6 @@ export default async (req) => {
     }
   }
   return json(200, { items }, true);
-};
+}
 
 export const config = { path: "/api/catalogue" };
