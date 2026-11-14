@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apparallel Fitting Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a fitting room. The mannequin owns the stage; everything else is a quiet rail beside it. */
+:root{
+  --bg:#EEF0F4; --surface:#FFFFFF; --stage:#DDE3EC; --ink:#141A2E; --muted:#5C6478;
+  --line:#CBD2DE; --accent:#2A3FE5; --accent-ink:#FFFFFF; --tag:#F4C542;
+  --display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10131C; --surface:#191D2A; --stage:#262D40; --ink:#ECEFF7; --muted:#9AA3B8;
+    --line:#2F364A; --accent:#8E9BFF; --accent-ink:#10131C; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10131C; --surface:#191D2A; --stage:#262D40; --ink:#ECEFF7; --muted:#9AA3B8;
+  --line:#2F364A; --accent:#8E9BFF; --accent-ink:#10131C; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;display:flex;flex-direction:column}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.mark{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:-.03em;margin:0}
+.mark b{color:var(--accent);font-weight:800;letter-spacing:.06em}
+.chip{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.linkbtn{background:none;border:0;padding:4px 2px;color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.cartbtn{background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:9px 16px;font-weight:600;display:flex;gap:8px;align-items:center}
+.cartbtn span{background:var(--tag);color:#1B1B1B;border-radius:999px;min-width:22px;padding:0 6px;font-size:13px;font-variant-numeric:tabular-nums}
+
+/* Onboarding */
+#onboard{flex:1;display:flex;align-items:center;padding:32px 20px;overflow:auto}
+.ob{max-width:720px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:24px}
+.ob h1{font-family:var(--display);font-weight:800;font-size:clamp(38px,8vw,76px);line-height:.95;letter-spacing:-.04em;margin:0;text-wrap:balance}
+.ob p{margin:0;color:var(--muted);max-width:52ch}
+.who{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.who button{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:22px 16px;text-align:left;font-family:var(--display);font-weight:700;font-size:22px;display:flex;flex-direction:column;gap:4px}
+.who button small{font-family:var(--body);font-weight:400;font-size:13px;color:var(--muted)}
+.who button:hover{border-color:var(--accent)}
+.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.wide{grid-column:1/-1}
+label,.lab{font-size:13px;font-weight:600;color:var(--muted)}
+select{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.primary{background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:14px 22px;font-weight:600;font-size:16px;align-self:flex-start}
+.obrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+
+/* Fitting room */
+#room{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px}
+#stage{position:relative;background:radial-gradient(ellipse at 50% 38%,var(--surface) 0%,var(--stage) 68%);min-height:0;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}
+#stage.drag{cursor:grabbing}
+#fig{position:absolute;inset:0;width:100%;height:100%;display:block}
+.badge{position:absolute;top:22px;font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.02em;padding:6px 14px;border-radius:10px;border:3px solid currentColor;opacity:0;pointer-events:none}
+.badge.add{right:22px;color:var(--accent);transform:rotate(8deg)}
+.badge.pass{left:22px;color:var(--muted);transform:rotate(-8deg)}
+#candWrap{transform-origin:150px 300px}
+.drop{animation:drop .62s cubic-bezier(.3,.9,.4,1) both}
+@keyframes drop{0%{transform:translateY(-640px)}68%{transform:translateY(7px)}84%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+.swing{transform-origin:212px 292px;animation:swing 2.6s ease-in-out infinite}
+@keyframes swing{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(4deg)}}
+
+#side{background:var(--surface);border-left:1px solid var(--line);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:20px}
+.eyebrow{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-variant-numeric:tabular-nums}
+#info{display:flex;flex-direction:column;gap:8px}
+#info h2{font-family:var(--display);font-weight:700;font-size:28px;line-height:1.05;letter-spacing:-.02em;margin:0;text-wrap:balance}
+#info p{margin:0}
+.meta{color:var(--muted)}
+.price{font-family:var(--display);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.sizes{display:flex;gap:6px;flex-wrap:wrap}
+.sizes span{border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;color:var(--muted)}
+.sizes span.me{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.acts button{border-radius:12px;padding:14px 10px;font-weight:600;border:1.5px solid var(--line);background:var(--bg)}
+.acts .yes{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.panel{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:12px}
+.panel h3{font-family:var(--display);font-size:17px;font-weight:700;margin:0}
+.row{display:flex;flex-direction:column;gap:6px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:5px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.sw{display:flex;gap:8px}
+.sw button{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);padding:0}
+.sw button[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+
+/* Cart */
+#shade{position:fixed;inset:0;background:rgba(10,12,20,.45);z-index:5}
+#cart{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--surface);z-index:6;display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.chead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px;border-bottom:1px solid var(--line)}
+.chead h2{font-family:var(--display);font-weight:800;font-size:28px;line-height:1;letter-spacing:-.03em;margin:0 0 6px}
+.chead p{margin:0;color:var(--muted);font-size:13px}
+.x{background:none;border:1.5px solid var(--line);border-radius:50%;width:34px;height:34px;flex:none;font-size:16px;line-height:1}
+#cbody{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
+.store{border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.store h3{margin:0;font-family:var(--display);font-size:18px;display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums}
+.line{display:flex;align-items:center;gap:10px;font-size:14px}
+.line i{width:14px;height:14px;border-radius:4px;border:1px solid var(--line);flex:none}
+.line .n{flex:1;min-width:0}
+.line .n small{display:block;color:var(--muted);font-size:12px}
+.line .p{font-variant-numeric:tabular-nums}
+.line button{background:none;border:0;color:var(--muted);padding:4px 6px;font-size:15px}
+.store .go{background:var(--ink);color:var(--bg);border:0;border-radius:10px;padding:11px;font-weight:600}
+.cfoot{border-top:1px solid var(--line);padding:16px 20px;display:flex;justify-content:space-between;font-family:var(--display);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);margin:0}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:9;max-width:calc(100% - 32px);text-align:center}
+
+@media (max-width:820px){
+  html,body{height:auto;min-height:100%}
+  #room{grid-template-columns:1fr}
+  #stage{height:min(66vh,540px)}
+  #side{border-left:0;border-top:1px solid var(--line);overflow:visible}
+  .who{grid-template-columns:1fr}
+  .chip span{display:none}
+}
+@media (prefers-reduced-motion:reduce){.drop,.swing{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <p class="mark">Appara<b>ll</b>el</p>
+  <div class="chip" id="chip" hidden><span id="chiptext"></span><button class="linkbtn" id="editProfile" type="button">Change</button></div>
+  <button class="cartbtn" id="openCart" type="button" hidden>Parallel universe <span id="cartCount">0</span></button>
+</header>
+
+<section id="onboard">
+  <div class="ob" id="ob1">
+    <h1>Who are you shopping for?</h1>
+    <p>Pick one and we will only drop clothes that suit. You can change it any time.</p>
+    <div class="who">
+      <button type="button" data-who="w">Women<small>Womenswear and unisex pieces</small></button>
+      <button type="button" data-who="m">Men<small>Menswear and unisex pieces</small></button>
+      <button type="button" data-who="all">Everyone<small>Show the whole rail</small></button>
+    </div>
+  </div>
+  <form class="ob" id="ob2" hidden>
+    <h1>What fits?</h1>
+    <p>Your sizes decide which pieces reach the mannequin. Anything not stocked in your size stays off the rail.</p>
+    <div class="fields">
+      <div class="field wide"><label for="fHeight">Height: <span id="hOut">165</span> cm</label><input type="range" id="fHeight" min="140" max="205" value="165"></div>
+      <div class="field"><label for="fTop">Top size</label><select id="fTop"></select></div>
+      <div class="field"><label for="fBottom">Bottom size</label><select id="fBottom"></select></div>
+      <div class="field"><label for="fShoe">Shoe size (EU)</label><select id="fShoe"></select></div>
+    </div>
+    <div class="obrow"><button class="primary" type="submit">Step into the fitting room</button><button class="linkbtn" type="button" id="backWho">Back</button></div>
+  </form>
+</section>
+
+<main id="room" hidden>
+  <div id="stage" aria-label="Fitting room. Drag the piece right to add it or left to pass.">
+    <svg id="fig" viewBox="-45 0 390 590" role="img" aria-label="Mannequin wearing the current piece"></svg>
+    <div class="badge add" id="bAdd">ADD</div>
+    <div class="badge pass" id="bPass">PASS</div>
+  </div>
+  <aside id="side">
+    <div id="info"></div>
+    <div id="actwrap">
+      <div class="acts">
+        <button type="button" id="btnPass">← Pass</button>
+        <button type="button" class="yes" id="btnAdd">Add →</button>
+      </div>
+      <p class="hint" style="margin-top:10px">Drag the piece off the mannequin, or use the arrow keys. Pieces you add stay on so you can build an outfit.</p>
+    </div>
+    <p class="hint" id="hiddenNote" hidden></p>
+    <div class="panel">
+      <h3>Your mannequin</h3>
+      <div class="row"><span class="lab">Skin tone</span><div class="sw" id="skins"></div></div>
+      <div class="row"><span class="lab">Hair</span><div class="seg" id="hairs"></div></div>
+      <div class="row"><span class="lab">Build</span><div class="seg" id="builds"></div></div>
+      <div><button class="linkbtn" type="button" id="clearFit">Take everything off</button></div>
+    </div>
+  </aside>
+</main>
+
+<div id="shade" hidden></div>
+<aside id="cart" hidden aria-label="Your parallel universe">
+  <div class="chead">
+    <div><h2>Your parallel universe</h2><p>One cart, sorted by store. You pay each store on its own site.</p></div>
+    <button class="x" type="button" id="closeCart" aria-label="Close cart">✕</button>
+  </div>
+  <div id="cbody"></div>
+  <div class="cfoot"><span>Total</span><span id="ctotal">S$0.00</span></div>
+</aside>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+var SIZES=['XS','S','M','L','XL','XXL'];
+function rg(a,b){return SIZES.slice(SIZES.indexOf(a),SIZES.indexOf(b)+1)}
+function eu(a,b){var r=[];for(var i=a;i<=b;i++)r.push(i);return r}
+
+/* Sample catalogue. Stores and products are invented for the prototype. */
+var CATALOGUE=[
+ {id:'t1',name:'Heavyweight Boxy Tee',store:'Northline',price:29.9,cat:'top',style:'tee',color:'#F3EFE6',g:'u',sizes:rg('XS','XXL')},
+ {id:'b1',name:'Straight Leg Jeans',store:'Northline',price:89.9,cat:'bottom',style:'jeans',color:'#3D5A8C',g:'u',sizes:rg('XS','XL')},
+ {id:'s1',name:'Court Sneakers',store:'Northline',price:99,cat:'shoes',style:'sneaker',color:'#F7F7F4',g:'u',sizes:eu(36,46)},
+ {id:'d1',name:'Bias Slip Dress',store:'Maru Studio',price:110,cat:'dress',style:'slip',color:'#7A2238',g:'w',sizes:rg('XS','L')},
+ {id:'o1',name:'Coach Jacket',store:'Kopi Club',price:119,cat:'outer',style:'jacket',color:'#1F2A44',g:'u',sizes:rg('S','XXL')},
+ {id:'t2',name:'Overcast Hoodie',store:'Kopi Club',price:69,cat:'top',style:'hoodie',color:'#A9AEB8',g:'u',sizes:rg('S','XXL')},
+ {id:'b2',name:'Linen Shorts',store:'Tidewear',price:39.9,cat:'bottom',style:'shorts',color:'#D8C6A3',g:'u',sizes:rg('XS','XL')},
+ {id:'t3',name:'Oxford Button-Down',store:'Northline',price:59.9,cat:'top',style:'shirt',color:'#BFD4EE',g:'m',sizes:rg('S','XL')},
+ {id:'b3',name:'A-Line Midi Skirt',store:'Maru Studio',price:65,cat:'bottom',style:'midi',color:'#5F6B3A',g:'w',sizes:rg('XS','L')},
+ {id:'s2',name:'Trail Runners',store:'Kopi Club',price:139,cat:'shoes',style:'sneaker',color:'#E8662B',g:'u',sizes:eu(38,46)},
+ {id:'t4',name:'Ribbed Tank',store:'Maru Studio',price:19.9,cat:'top',style:'tank',color:'#1C1C1F',g:'w',sizes:rg('XS','L')},
+ {id:'b4',name:'Pleated Trousers',store:'Maru Studio',price:95,cat:'bottom',style:'jeans',color:'#C9B58F',g:'u',sizes:rg('S','XL')},
+ {id:'t5',name:'Cobalt Crew Tee',store:'Tidewear',price:24.9,cat:'top',style:'tee',color:'#2F55D4',g:'u',sizes:rg('XS','XXL')},
+ {id:'d2',name:'Marigold Sundress',store:'Tidewear',price:72,cat:'dress',style:'sun',color:'#EDB92E',g:'w',sizes:rg('S','XL')},
+ {id:'b5',name:'Black Slim Jeans',store:'Tidewear',price:79.9,cat:'bottom',style:'jeans',color:'#23242A',g:'m',sizes:rg('S','XXL')},
+ {id:'o2',name:'Washed Denim Jacket',store:'Maru Studio',price:98,cat:'outer',style:'jacket',color:'#6F8FB8',g:'u',sizes:rg('XS','L')},
+ {id:'t6',name:'Merino Long Sleeve',store:'Maru Studio',price:79,cat:'top',style:'long',color:'#B5532B',g:'u',sizes:rg('XS','XL')},
+ {id:'s3',name:'Chelsea Boots',store:'Maru Studio',price:165,cat:'shoes',style:'boot',color:'#5A3A26',g:'u',sizes:eu(37,45)},
+ {id:'b6',name:'Pleated Tennis Skirt',store:'Northline',price:45,cat:'bottom',style:'mini',color:'#F1F1EE',g:'w',sizes:rg('XS','M')},
+ {id:'b7',name:'Running Shorts',store:'Kopi Club',price:34,cat:'bottom',style:'shorts',color:'#26272C',g:'m',sizes:rg('S','XXL')},
+ {id:'t7',name:'Pocket Tee in Moss',store:'Kopi Club',price:32,cat:'top',style:'tee',color:'#6E8B5B',g:'u',sizes:rg('M','XXL')},
+ {id:'t8',name:'Linen Shirt in Sage',store:'Tidewear',price:54,cat:'top',style:'shirt',color:'#B9C7AE',g:'u',sizes:rg('XS','L')}
+];
+var byId={};CATALOGUE.forEach(function(i){byId[i.id]=i});
+var CATNAME={top:'Top',bottom:'Bottom',dress:'Dress',outer:'Jacket',shoes:'Shoes'};
+var WHO={w:'Women',m:'Men',all:'Everyone'};
+var SKINS=['#F3D3BC','#E2B48F','#C68E64','#96623F','#5B3A26'];
+
+var S={onboarded:false,profile:{who:'w',height:165,top:'M',bottom:'M',shoe:38},look:{skin:1,hair:'short',build:'regular'},worn:{},cart:[],idx:0};
+try{var raw=localStorage.getItem('apparallel-v1');if(raw){var o=JSON.parse(raw);for(var k in o)S[k]=o[k]}}catch(e){}
+function save(){try{localStorage.setItem('apparallel-v1',JSON.stringify(S))}catch(e){}}
+
+var deck=[],hiddenCount=0,busy=false;
+function $(id){return document.getElementById(id)}
+function money(n){return 'S$'+n.toFixed(2)}
+function mySize(it){return it.cat==='shoes'?S.profile.shoe:(it.cat==='bottom'?S.profile.bottom:S.profile.top)}
+function buildDeck(){
+  deck=[];hiddenCount=0;
+  CATALOGUE.forEach(function(it){
+    var okWho=S.profile.who==='all'||it.g==='u'||it.g===S.profile.who;
+    if(!okWho)return;
+    if(it.sizes.indexOf(mySize(it))<0){hiddenCount++;return}
+    deck.push(it.id);
+  });
+  if(S.idx>deck.length)S.idx=deck.length;
+}
+function cand(){return S.idx<deck.length?byId[deck[S.idx]]:null}
+
+/* ---------- drawing ---------- */
+function shade(hex,f){var n=parseInt(hex.slice(1),16),r=n>>16,g=(n>>8)&255,b=n&255;
+  function c(v){v=Math.round(v*f);return ('0'+Math.max(0,Math.min(255,v)).toString(16)).slice(-2)}
+  return '#'+c(r)+c(g)+c(b)}
+function mir(s){return s+'<g transform="translate(300 0) scale(-1 1)">'+s+'</g>'}
+var TORSO='M112,110 Q128,101 138,104 Q150,118 162,104 Q172,101 188,110 L191,275 L109,275 Z';
+var SHORT='<path d="M112,110 Q98,110 92,122 L82,162 L104,170 L113,146 Z"/>';
+var LONG='<path d="M112,110 Q96,110 90,126 L74,284 L101,288 L114,150 Z"/>';
+function wrap(c,inner){return '<g fill="'+c+'" stroke="'+shade(c,.62)+'" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">'+inner+'</g>'}
+var G={
+ tee:function(c){return wrap(c,mir(SHORT)+'<path d="'+TORSO+'"/>')},
+ long:function(c){return wrap(c,mir(LONG)+'<path d="'+TORSO+'"/><path d="M136,106 Q150,121 164,106" fill="none"/>')},
+ tank:function(c){return wrap(c,'<path d="M124,104 L137,104 Q150,126 163,104 L176,104 L190,152 L190,275 L110,275 L110,152 Z"/>')},
+ hoodie:function(c){return wrap(c,mir(LONG)+'<path d="M112,110 Q128,101 138,104 Q150,118 162,104 Q172,101 188,110 L192,282 L108,282 Z"/>'+
+   '<path d="M127,106 Q150,92 173,106 Q164,124 150,126 Q136,124 127,106 Z" fill="'+shade(c,.86)+'"/>'+
+   '<path d="M128,226 L172,226 L180,260 L120,260 Z" fill="'+shade(c,.92)+'"/><path d="M143,124 L142,152 M157,124 L158,152" fill="none"/>')},
+ shirt:function(c){return wrap(c,mir(LONG)+'<path d="'+TORSO+'"/>'+mir('<path d="M138,104 L150,119 L133,124 Z" fill="'+shade(c,.9)+'"/>')+
+   '<path d="M150,119 L150,275" fill="none"/><g stroke="none" fill="'+shade(c,.55)+'"><circle cx="150" cy="140" r="1.8"/><circle cx="150" cy="170" r="1.8"/><circle cx="150" cy="200" r="1.8"/><circle cx="150" cy="230" r="1.8"/><circle cx="150" cy="258" r="1.8"/></g>')},
+ jacket:function(c){return wrap(c,mir('<path d="M110,109 Q93,109 87,126 L71,286 L102,290 L114,150 Z"/>')+
+   '<path d="M110,109 Q128,100 138,103 L150,122 L162,103 Q172,100 190,109 L195,288 L105,288 Z"/>'+
+   mir('<path d="M138,103 L150,122 L128,128 Z" fill="'+shade(c,.82)+'"/>')+
+   '<path d="M150,122 L150,288 M118,236 L138,236 M162,236 L182,236" fill="none"/>')},
+ jeans:function(c){return wrap(c,'<path d="M109,258 L191,258 L187,400 L183,536 L155,536 L151,302 L149,302 L145,536 L117,536 L113,400 Z"/><path d="M109,269 L191,269 M150,269 L150,300" fill="none"/>')},
+ shorts:function(c){return wrap(c,'<path d="M109,258 L191,258 L193,352 L154,352 L150,302 L146,352 L107,352 Z"/><path d="M109,269 L191,269" fill="none"/>')},
+ midi:function(c){return wrap(c,'<path d="M111,258 L189,258 L210,404 L90,404 Z"/><path d="M111,269 L189,269 M135,270 L128,404 M165,270 L172,404" fill="none"/>')},
+ mini:function(c){return wrap(c,'<path d="M111,258 L189,258 L202,342 L98,342 Z"/><path d="M111,268 L189,268 M126,268 L120,342 M142,268 L139,342 M158,268 L161,342 M174,268 L180,342" fill="none"/>')},
+ slip:function(c){return wrap(c,'<path d="M129,98 L134,98 L140,130 Q150,138 160,130 L166,98 L171,98 L189,152 L185,212 L206,424 L94,424 L115,212 L111,152 Z"/>')},
+ sun:function(c){return wrap(c,'<path d="M124,104 L137,104 Q150,126 163,104 L176,104 L190,152 L186,206 L216,384 L84,384 L114,206 L110,152 Z"/><path d="M114,206 L186,206" fill="none"/>')},
+ sneaker:function(c){return wrap(c,mir('<path d="M111,532 L146,532 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 Z"/><path d="M101,556 L149,556" fill="none" stroke-width="2.6"/><path d="M118,540 L134,540 M117,546 L133,546" fill="none"/>'))},
+ boot:function(c){return wrap(c,mir('<path d="M116,498 L146,498 L148,551 Q149,562 138,562 L108,562 Q99,562 102,551 L116,538 Z"/><path d="M101,557 L149,557" fill="none" stroke-width="3"/><path d="M130,500 L130,530" fill="none"/>'))}
+};
+function garment(it){return G[it.style](it.color)}
+
+function draw(drop){
+  var c=cand(),L=S.look,skin=SKINS[L.skin],sk2=shade(skin,.78);
+  var sx={slim:.93,regular:1,broad:1.08}[L.build];
+  var hs=.86+(S.profile.height-140)/65*.2;
+  var pv={};for(var k in S.worn)pv[k]=S.worn[k];
+  if(c){
+    if(c.cat==='dress'){delete pv.top;delete pv.bottom}
+    else if(c.cat==='top'||c.cat==='bottom'){delete pv.dress}
+    pv[c.cat]=c.id;
+  }
+  function layer(slot){
+    var id=pv[slot];if(!id||!byId[id])return '';
+    var g=garment(byId[id]);
+    return (c&&c.id===id)?'<g id="candWrap"><g class="'+(drop?'drop':'')+'">'+g+'</g></g>':g;
+  }
+  var hairC='#2B2322',hairS='#4A3E3B';
+  var cap='<path d="M121,60 Q117,24 150,24 Q183,24 179,60 Q175,41 150,39 Q125,41 121,60 Z" fill="'+hairC+'" stroke="'+hairS+'" stroke-width="1"/>';
+  var back=L.hair==='long'?'<path d="M118,60 Q113,20 150,20 Q187,20 182,60 L191,134 Q171,140 168,108 L132,108 Q129,140 109,134 Z" fill="'+hairC+'" stroke="'+hairS+'" stroke-width="1"/>':'';
+  var front=L.hair==='none'?'':cap+(L.hair==='bun'?'<circle cx="150" cy="19" r="12" fill="'+hairC+'" stroke="'+hairS+'" stroke-width="1"/>':'');
+  var body='<g fill="'+skin+'" stroke="'+sk2+'" stroke-width="1.4" stroke-linejoin="round">'+
+    mir('<path d="M108,112 Q92,116 90,140 L80,280 Q79,296 90,296 Q99,296 99,282 L113,150 Z"/>')+
+    mir('<path d="M110,262 L150,262 L146,400 L142,542 L120,542 L116,400 Z"/><ellipse cx="128" cy="552" rx="20" ry="10"/>')+
+    '<path d="M108,112 Q150,102 192,112 L186,200 Q184,240 190,270 L110,270 Q116,240 114,200 Z"/>'+
+    '<path d="M140,88 L160,88 L161,110 L139,110 Z"/><ellipse cx="150" cy="62" rx="27" ry="33"/></g>';
+  var tag='';
+  if(c){
+    var hx=150+60*sx;
+    tag='<g class="swing"><path d="M'+hx+',292 L226,340" stroke="'+sk2+'" stroke-width="1.2" fill="none"/>'+
+      '<g transform="translate(214 320) rotate(6)"><path d="M0,20 L14,0 L124,0 L124,40 L14,40 Z" fill="#F4C542" stroke="#9C7A14" stroke-width="1.2" stroke-linejoin="round"/>'+
+      '<circle cx="12" cy="20" r="3" fill="#FFF8DC" stroke="#9C7A14" stroke-width="1"/>'+
+      '<text x="22" y="18" font-family="Bricolage Grotesque, sans-serif" font-size="13.5" font-weight="700" fill="#1B1B1B">🏷️ '+money(c.price)+'</text>'+
+      '<text x="24" y="32" font-family="Instrument Sans, sans-serif" font-size="9.5" fill="#4A3B0A">'+c.store+'</text></g></g>';
+  }
+  $('fig').innerHTML='<ellipse cx="150" cy="566" rx="'+(92*hs)+'" ry="9" fill="#000" opacity=".13"/>'+
+    '<g transform="translate(150 566) scale('+hs+') translate(-150 -566)">'+
+    '<g transform="translate(150 0) scale('+sx+' 1) translate(-150 0)">'+back+body+front+
+    layer('shoes')+layer('bottom')+layer('top')+layer('dress')+layer('outer')+'</g>'+tag+'</g>';
+}
+
+/* ---------- side panel ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]})}
+function panel(){
+  var c=cand(),h;
+  if(c){
+    var me=mySize(c);
+    h='<p class="eyebrow">Piece '+(S.idx+1)+' of '+deck.length+'</p><h2>'+esc(c.name)+'</h2>'+
+      '<p class="meta">'+esc(c.store)+' · '+CATNAME[c.cat]+'</p><p class="price">'+money(c.price)+'</p>'+
+      '<div class="sizes" aria-label="Sizes in stock">'+c.sizes.map(function(s){return '<span'+(s===me?' class="me"':'')+'>'+s+(s===me?' · yours':'')+'</span>'}).join('')+'</div>';
+  }else if(deck.length){
+    h='<p class="eyebrow">End of the rail</p><h2>You have seen every piece</h2><p class="meta">Your picks are waiting in your parallel universe.</p>'+
+      '<div><button class="primary" type="button" id="again">Go through them again</button></div>';
+  }else{
+    h='<p class="eyebrow">Empty rail</p><h2>Nothing in your sizes yet</h2><p class="meta">Change your sizes or who you are shopping for to see more.</p>';
+  }
+  $('info').innerHTML=h;
+  $('actwrap').hidden=!c;
+  var hn=$('hiddenNote');hn.hidden=!hiddenCount;
+  hn.textContent=hiddenCount+(hiddenCount===1?' piece is':' pieces are')+' off the rail because '+(hiddenCount===1?'it is':'they are')+' not stocked in your size.';
+  var a=$('again');if(a)a.onclick=function(){S.idx=0;save();draw(true);panel()};
+  var p=S.profile;
+  $('chiptext').textContent=WHO[p.who]+' · '+p.height+' cm · Top '+p.top+' · Bottom '+p.bottom+' · EU '+p.shoe;
+  $('cartCount').textContent=S.cart.length;
+}
+
+/* ---------- swiping ---------- */
+function wear(it){
+  if(it.cat==='dress'){delete S.worn.top;delete S.worn.bottom}
+  else if(it.cat==='top'||it.cat==='bottom'){delete S.worn.dress}
+  S.worn[it.cat]=it.id;
+}
+function decide(dir){
+  var c=cand();if(!c||busy)return;busy=true;
+  var w=$('candWrap');
+  if(w){w.style.transition='transform .28s ease-in, opacity .28s ease-in';w.style.transform='translate('+(dir*380)+'px,-20px) rotate('+(dir*24)+'deg)';w.style.opacity='0'}
+  setTimeout(function(){
+    if(dir>0){
+      wear(c);
+      if(S.cart.indexOf(c.id)<0)S.cart.push(c.id);
+      toast(c.name+' is in your parallel universe');
+    }
+    S.idx++;busy=false;badges(0);save();draw(true);panel();
+  },280);
+}
+function badges(dx){
+  $('bAdd').style.opacity=Math.max(0,Math.min(1,dx/90));
+  $('bPass').style.opacity=Math.max(0,Math.min(1,-dx/90));
+}
+var st=$('stage'),sx0=null,dx=0;
+st.addEventListener('pointerdown',function(e){if(busy||!cand())return;sx0=e.clientX;dx=0;st.classList.add('drag');try{st.setPointerCapture(e.pointerId)}catch(err){}});
+st.addEventListener('pointermove',function(e){
+  if(sx0===null)return;dx=e.clientX-sx0;
+  var w=$('candWrap');if(w){w.style.transition='none';var u=dx*390/Math.max(1,st.clientWidth)*1.4;w.style.transform='translate('+u+'px,0) rotate('+(dx/16)+'deg)'}
+  badges(dx);
+});
+function endDrag(){
+  if(sx0===null)return;sx0=null;st.classList.remove('drag');
+  if(Math.abs(dx)>90){decide(dx>0?1:-1)}
+  else{var w=$('candWrap');if(w){w.style.transition='transform .2s ease-out';w.style.transform='none'}badges(0)}
+  dx=0;
+}
+st.addEventListener('pointerup',endDrag);st.addEventListener('pointercancel',endDrag);
+$('btnAdd').onclick=function(){decide(1)};
+$('btnPass').onclick=function(){decide(-1)};
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&!$('cart').hidden){closeCart();return}
+  if($('room').hidden||!$('cart').hidden)return;
+  var t=e.target.tagName;if(t==='INPUT'||t==='SELECT')return;
+  if(e.key==='ArrowRight'){e.preventDefault();decide(1)}
+  if(e.key==='ArrowLeft'){e.preventDefault();decide(-1)}
+});
+
+/* ---------- mannequin editor ---------- */
+function seg(el,opts,key){
+  el.innerHTML=opts.map(function(o){return '<button type="button" data-v="'+o[0]+'" aria-pressed="'+(String(S.look[key])===String(o[0]))+'">'+o[1]+'</button>'}).join('');
+  el.onclick=function(e){var b=e.target.closest('button');if(!b)return;S.look[key]=key==='skin'?+b.dataset.v:b.dataset.v;save();editor();draw(false)};
+}
+function editor(){
+  var sk=$('skins');
+  sk.innerHTML=SKINS.map(function(c,i){return '<button type="button" data-v="'+i+'" style="background:'+c+'" aria-label="Skin tone '+(i+1)+'" aria-pressed="'+(S.look.skin===i)+'"></button>'}).join('');
+  sk.onclick=function(e){var b=e.target.closest('button');if(!b)return;S.look.skin=+b.dataset.v;save();editor();draw(false)};
+  seg($('hairs'),[['none','None'],['short','Short'],['long','Long'],['bun','Bun']],'hair');
+  seg($('builds'),[['slim','Slim'],['regular','Regular'],['broad','Broad']],'build');
+}
+$('clearFit').onclick=function(){S.worn={};save();draw(false)};
+
+/* ---------- cart ---------- */
+function renderCart(){
+  var groups={},order=[],total=0;
+  S.cart.forEach(function(id){var it=byId[id];if(!it)return;if(!groups[it.store]){groups[it.store]=[];order.push(it.store)}groups[it.store].push(it);total+=it.price});
+  var h=order.length?'':'<p class="empty">Nothing here yet. Add a piece from the mannequin and it lands here.</p>';
+  order.forEach(function(s){
+    var sub=groups[s].reduce(function(a,i){return a+i.price},0),n=groups[s].length;
+    h+='<div class="store"><h3><span>'+esc(s)+'</span><span>'+money(sub)+'</span></h3>'+
+      groups[s].map(function(i){return '<div class="line"><i style="background:'+i.color+'"></i><span class="n">'+esc(i.name)+'<small>'+CATNAME[i.cat]+' · size '+mySize(i)+'</small></span><span class="p">'+money(i.price)+'</span><button type="button" data-rm="'+i.id+'" aria-label="Remove '+esc(i.name)+'">✕</button></div>'}).join('')+
+      '<button class="go" type="button" data-go="'+esc(s)+'" data-n="'+n+'">Check out at '+esc(s)+' ↗</button></div>';
+  });
+  $('cbody').innerHTML=h;$('ctotal').textContent=money(total);$('cartCount').textContent=S.cart.length;
+}
+$('cbody').onclick=function(e){
+  var r=e.target.closest('[data-rm]'),g=e.target.closest('[data-go]');
+  if(r){var id=r.dataset.rm;S.cart=S.cart.filter(function(x){return x!==id});for(var k in S.worn)if(S.worn[k]===id)delete S.worn[k];save();renderCart();draw(false)}
+  if(g){toast('Prototype: the live site opens '+g.dataset.go+' here with your '+g.dataset.n+(g.dataset.n==='1'?' piece':' pieces'))}
+};
+function openCart(){renderCart();$('cart').hidden=false;$('shade').hidden=false;$('closeCart').focus()}
+function closeCart(){$('cart').hidden=true;$('shade').hidden=true;$('openCart').focus()}
+$('openCart').onclick=openCart;$('closeCart').onclick=closeCart;$('shade').onclick=closeCart;
+
+var tt;function toast(m){var t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(function(){t.hidden=true},2600)}
+
+/* ---------- onboarding ---------- */
+function fill(sel,opts,val){sel.innerHTML=opts.map(function(o){return '<option'+(String(o)===String(val)?' selected':'')+'>'+o+'</option>'}).join('')}
+function showOnboard(step){
+  $('room').hidden=true;$('onboard').hidden=false;$('chip').hidden=true;$('openCart').hidden=true;
+  $('ob1').hidden=step!==1;$('ob2').hidden=step!==2;
+  if(step===2){
+    var p=S.profile;$('fHeight').value=p.height;$('hOut').textContent=p.height;
+    fill($('fTop'),SIZES,p.top);fill($('fBottom'),SIZES,p.bottom);fill($('fShoe'),eu(35,47),p.shoe);
+  }
+}
+function showRoom(){
+  $('onboard').hidden=true;$('room').hidden=false;$('chip').hidden=false;$('openCart').hidden=false;
+  buildDeck();editor();draw(true);panel();
+}
+$('ob1').onclick=function(e){
+  var b=e.target.closest('[data-who]');if(!b)return;
+  var w=b.dataset.who;
+  if(!S.onboarded){if(w==='m'){S.profile.height=176;S.profile.shoe=43}else{S.profile.height=165;S.profile.shoe=38}}
+  S.profile.who=w;showOnboard(2);
+};
+$('fHeight').oninput=function(){$('hOut').textContent=this.value};
+$('backWho').onclick=function(){showOnboard(1)};
+$('ob2').addEventListener('submit',function(e){
+  e.preventDefault();
+  S.profile.height=+$('fHeight').value;S.profile.top=$('fTop').value;S.profile.bottom=$('fBottom').value;S.profile.shoe=+$('fShoe').value;
+  S.onboarded=true;S.idx=0;save();showRoom();
+});
+$('editProfile').onclick=function(){showOnboard(1)};
+
+if(S.onboarded)showRoom();else showOnboard(1);
+})();
+</script>
+</body>
+</html>
