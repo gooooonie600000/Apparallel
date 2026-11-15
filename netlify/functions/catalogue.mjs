@@ -85,6 +85,7 @@ function normalise(p, cat, style) {
     store: offer.domain,
     url: offer.url,
     price: offer.price.price,
+    was: offer.price.compare_at_price && offer.price.compare_at_price > offer.price.price ? offer.price.compare_at_price : null,
     cur: offer.price.currency,
     cat,
     g: p.gender === "female" ? "w" : p.gender === "male" ? "m" : "u",
@@ -96,13 +97,14 @@ function normalise(p, cat, style) {
   };
 }
 
-async function search(key, s, gender, maxPrice, limit, style) {
+async function search(key, s, gender, maxPrice, limit, style, sale) {
   const who = gender === "female" ? "women's " : gender === "male" ? "men's " : "";
   const look = style ? STYLE_WORDS[style] + " " : "";
   const body = { query: who + look + s.query, limit };
   const filters = {};
   if (gender) filters.gender = gender;
   if (maxPrice) filters.price = { max_price: maxPrice };
+  if (sale) filters.sale = "on_sale";
   if (Object.keys(filters).length) body.filters = filters;
   const r = await fetch(API, {
     method: "POST",
@@ -123,7 +125,7 @@ function json(status, payload, cache) {
     // One fetch per shopper type per day keeps usage inside the free tier.
     headers["Cache-Control"] = "public, max-age=0, must-revalidate";
     headers["Netlify-CDN-Cache-Control"] = "public, durable, s-maxage=86400";
-    headers["Netlify-Vary"] = "query=who|max|cats|style";
+    headers["Netlify-Vary"] = "query=who|max|cats|style|sale";
   } else {
     headers["Cache-Control"] = "no-store";
   }
@@ -153,6 +155,7 @@ async function handle(req) {
   const gender = who === "w" ? "female" : who === "m" ? "male" : null;
   const maxPrice = [50, 100, 200].includes(Number(params.get("max"))) ? Number(params.get("max")) : 0;
   const style = STYLE_WORDS[params.get("style")] ? params.get("style") : "";
+  const sale = params.get("sale") === "1";
   const wanted = (params.get("cats") || "").split(",").filter(Boolean);
   let jobs = SEARCHES.filter((s) => s.skipFor !== gender);
   if (wanted.length) jobs = jobs.filter((s) => wanted.includes(s.cat));
@@ -160,7 +163,7 @@ async function handle(req) {
   // Fewer kinds of clothing asked for means more of each.
   const limit = Math.max(12, Math.min(30, Math.floor(72 / jobs.length)));
 
-  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit, style)));
+  const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit, style, sale)));
   const lists = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
   if (!lists.length) {
     const why = results[0] && results[0].reason ? String(results[0].reason.message) : "unknown error";

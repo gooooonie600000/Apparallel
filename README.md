@@ -4,16 +4,17 @@ Swipe clothes onto a mannequin; the ones you keep land in one cart, sorted by st
 
 ## Layout
 
-- `public/` — the site Netlify serves. `index.html` is the working prototype (sample catalogue, invented stores).
-- `netlify/functions/catalogue.mjs` — fetches real products from Channel3 and serves them at `/api/catalogue`. Needs the Channel3 key in a Netlify environment variable named `Apparallel` (or `CHANNEL3_API_KEY`). Without it the page falls back to the sample pieces.
+- `public/index.html` — the whole site: mannequin designer, fitting room, Hot sales, Sell, cart and demo checkout.
+- `netlify/functions/catalogue.mjs` — fetches products from Channel3 and serves them at `/api/catalogue`. Needs the Channel3 key in a Netlify environment variable named `Apparallel` (or `CHANNEL3_API_KEY`). Without it the page falls back to sample pieces.
+- `netlify/functions/img.mjs` — passes product photos through the site so the page can remove their backdrops and measure them.
 - `netlify.toml` — tells Netlify to publish `public/` and where functions are.
+
+## Prototype limits
+
+- Checkout is a demo: no payment is taken and nothing is stored or sent.
+- Product photos and prices come from Channel3; listings are stand-ins until sellers list directly.
+- Seller listings, cart and taste are saved in the visitor's browser only. Accounts, a database and real payments are the next build.
 
 ## Deploying
 
-Connect this repository in Netlify (Add new site → Import from Git). No build command is needed. Every push to `main` goes live.
-
-## Next
-
-1. Confirm real products load and check which stores and currencies come back.
-2. Fit product photos to the mannequin properly (they are placed over it for now).
-3. Add a Singapore data source; Channel3 does not list Singapore or SGD.
+Connected to Netlify; every push to `main` goes live.
