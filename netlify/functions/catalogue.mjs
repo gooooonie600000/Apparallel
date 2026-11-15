@@ -44,19 +44,19 @@ function hueName(colors) {
   return "pink";
 }
 
-const GOOD_SHOTS = ["flat_lay", "hero", "angle_view"];
-const BAD_SHOTS = ["on_model", "lifestyle", "in_use", "size_chart", "packaging", "product_information", "merchant_information"];
+// Only photos of the product on its own can be put on the mannequin. Photos of a person wearing
+// the piece are left out, and so are products that have no other kind of photo.
+const PRODUCT_SHOTS = { shoes: ["hero", "angle_view", "flat_lay"], other: ["flat_lay", "hero"] };
 
-function pickImage(images) {
+function pickImage(images, cat) {
+  const allowed = PRODUCT_SHOTS[cat] || PRODUCT_SHOTS.other;
   let best = null;
   let bestScore = -Infinity;
   for (const im of images || []) {
-    if (!im || !im.url) continue;
-    let s = 0;
+    if (!im || !im.url || !allowed.includes(im.shot_type)) continue;
+    let s = allowed.length - allowed.indexOf(im.shot_type);
     if (im.cleaned_url) s += 10;
-    if (GOOD_SHOTS.includes(im.shot_type)) s += 4;
-    if (BAD_SHOTS.includes(im.shot_type)) s -= 6;
-    if (im.is_main_image) s += 2;
+    if (im.is_main_image) s += 1;
     if (s > bestScore) { bestScore = s; best = im; }
   }
   return best;
@@ -75,7 +75,7 @@ function normalise(p, cat, style) {
   if (p.age && p.age !== "adult") return null;
   if (sizesOf(p).some((s) => KID_SIZE.test(s.trim()))) return null;
   const offer = (p.offers || []).find((o) => o.availability === "InStock" && o.price) || (p.offers || [])[0];
-  const im = pickImage(p.images);
+  const im = pickImage(p.images, cat);
   if (!offer || !offer.price || !im) return null;
   return {
     id: "c3-" + p.id,
@@ -92,7 +92,6 @@ function normalise(p, cat, style) {
     img: im.cleaned_url || im.url,
     cut: Boolean(im.cleaned_url),
     shot: im.shot_type || "",
-    shots: (p.images || []).map((i) => (i.shot_type || "none") + (i.cleaned_url ? "+c" : "")).slice(0, 8),
     style: style || "",
     hue: hueName(p.colors),
     sizes: sizesOf(p),
@@ -163,7 +162,7 @@ async function handle(req) {
   if (wanted.length) jobs = jobs.filter((s) => wanted.includes(s.cat));
   if (!jobs.length) return json(200, { items: [] });
   // Fewer kinds of clothing asked for means more of each.
-  const limit = Math.max(12, Math.min(30, Math.floor(72 / jobs.length)));
+  const limit = 30; // many products are dropped for lacking a product-only photo, so ask for the most allowed
 
   const results = await Promise.allSettled(jobs.map((s) => search(key, s, gender, maxPrice, limit, style, sale)));
   const lists = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
