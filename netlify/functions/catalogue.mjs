@@ -91,6 +91,8 @@ function normalise(p, cat, style) {
     g: p.gender === "female" ? "w" : p.gender === "male" ? "m" : "u",
     img: im.cleaned_url || im.url,
     cut: Boolean(im.cleaned_url),
+    shot: im.shot_type || "",
+    shots: (p.images || []).map((i) => (i.shot_type || "none") + (i.cleaned_url ? "+c" : "")).slice(0, 8),
     style: style || "",
     hue: hueName(p.colors),
     sizes: sizesOf(p),
